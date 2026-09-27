@@ -1,0 +1,195 @@
+use Test;
+use lib 'lib';
+use JSON::Fast;
+use MCP::Server;
+use MCP::Server::Tool;
+
+# What a tool publishes about its own arguments is the only thing a model can
+# read before it calls: a parameter the handler cannot do without has to be in
+# the schema's "required" array, and a default the handler applies has to be on
+# the property.  Both are declaration — nothing here enforces or applies them —
+# so these tests are about what reaches the wire, not about handler behaviour.
+
+plan 7;
+
+subtest 'required and default reach the schema' => {
+	plan 6;
+
+	my $tool = MCP::Server::Tool.new(
+		name => 'grep',
+		params => {
+			pattern => { type => 'string', description => 'Text to find', required => True },
+			path    => { type => 'string', default => '.' },
+			regex   => { type => 'boolean', default => False },
+			context => { type => 'integer', default => 0 },
+			glob    => { type => 'string', default => '' },
+			limit   => { type => 'integer' },
+		},
+		handler => -> :%args { 'ok' },
+	);
+
+	my %schema = $tool.input-schema;
+	is-deeply %schema<required>, ['pattern',], 'the one required parameter is named';
+	is %schema<properties><path><default>, '.', 'a string default is published';
+	is %schema<properties><context><default>, 0, 'an integer default is published';
+	is %schema<properties><glob><default>, '', 'an empty-string default is published';
+	is %schema<properties><regex><default>, False, 'a False default is published';
+	nok %schema<properties><limit><default>:exists,
+		'a parameter with no declared default has no default key';
+};
+
+subtest 'falsy defaults survive presence, not truthiness' => {
+	plan 6;
+
+	# The whole point of testing for the key rather than the value: False, 0
+	# and '' are the real defaults of real parameters, and a truthiness test
+	# would drop every one of them.
+	for (False, 0, '', 0.0) -> $falsy {
+		my $tool = MCP::Server::Tool.new(
+			name => 'falsy',
+			params => { flag => { type => 'string', default => $falsy } },
+			handler => -> :%args { 'ok' },
+		);
+		ok $tool.input-schema<properties><flag><default>:exists,
+			"default => {$falsy.raku} is published";
+	}
+
+	# An explicit undefined default is still a declaration: JSON Schema's
+	# `default: null` says "absent means null", which is not the same claim as
+	# saying nothing.
+	my $explicit = MCP::Server::Tool.new(
+		name => 'explicit-null',
+		params => { flag => { type => 'string', default => Nil } },
+		handler => -> :%args { 'ok' },
+	);
+	ok $explicit.input-schema<properties><flag><default>:exists,
+		'an explicitly declared undefined default is still published';
+
+	my $silent = MCP::Server::Tool.new(
+		name => 'silent',
+		params => { flag => { type => 'string' } },
+		handler => -> :%args { 'ok' },
+	);
+	nok $silent.input-schema<properties><flag><default>:exists,
+		'a spec that says nothing about a default publishes nothing';
+};
+
+subtest 'defaults of every JSON type' => {
+	plan 4;
+
+	my $tool = MCP::Server::Tool.new(
+		name => 'shapes',
+		params => {
+			args   => { type => 'array',   default => [] },
+			opts   => { type => 'object',  default => {} },
+			budget => { type => 'number',  default => 1.5 },
+			name   => { type => 'string',  default => 'anonymous' },
+		},
+		handler => -> :%args { 'ok' },
+	);
+
+	my %props = $tool.input-schema<properties>;
+	is-deeply %props<args><default>, [], 'an empty array default';
+	is-deeply %props<opts><default>, {}, 'an empty object default';
+	is %props<budget><default>, 1.5, 'a fractional number default';
+	is %props<name><default>, 'anonymous', 'a string default';
+};
+
+subtest 'required behaviour is unchanged' => {
+	plan 4;
+
+	my $none = MCP::Server::Tool.new(
+		name => 'none',
+		params => { a => { type => 'string' }, b => { type => 'string', default => 'x' } },
+		handler => -> :%args { 'ok' },
+	);
+	nok $none.input-schema<required>:exists,
+		'a tool with nothing required carries no required key at all';
+
+	my $some = MCP::Server::Tool.new(
+		name => 'some',
+		params => {
+			a => { type => 'string', required => True },
+			b => { type => 'string', required => False },
+			c => { type => 'string' },
+		},
+		handler => -> :%args { 'ok' },
+	);
+	is-deeply $some.input-schema<required>, ['a',], 'only the True one is required';
+
+	my $both = MCP::Server::Tool.new(
+		name => 'both',
+		params => { a => { type => 'string', required => True, default => 'fallback' } },
+		handler => -> :%args { 'ok' },
+	);
+	is-deeply $both.input-schema<required>, ['a',],
+		'a default does not stop a parameter being required';
+	is $both.input-schema<properties><a><default>, 'fallback',
+		'and required does not stop its default being published';
+};
+
+subtest 'schema shape is untouched otherwise' => {
+	plan 4;
+
+	my $tool = MCP::Server::Tool.new(
+		name => 'shape',
+		params => { a => { description => 'No type given', default => 'x' } },
+		handler => -> :%args { 'ok' },
+	);
+	my %schema = $tool.input-schema;
+	is %schema<type>, 'object', 'still an object schema';
+	is %schema<properties><a><type>, 'string', 'an absent type still defaults to string';
+	is %schema<properties><a><description>, 'No type given', 'description still copied';
+	is-deeply %schema<properties><a>.keys.sort.List, <default description type>.List,
+		'and nothing else from the spec leaks into the property';
+};
+
+subtest 'unknown spec keys are still dropped' => {
+	plan 1;
+
+	# This task published `default` and nothing else: `items`, `enum` and the
+	# numeric bounds are deliberately not carried yet, and a test that says so
+	# is what stops the next one arriving by accident.
+	my $tool = MCP::Server::Tool.new(
+		name => 'extras',
+		params => {
+			a => {
+				type    => 'array',
+				default => [],
+				items   => { type => 'string' },
+				enum    => <x y>.Array,
+				minimum => 1,
+			},
+		},
+		handler => -> :%args { 'ok' },
+	);
+	is-deeply $tool.input-schema<properties><a>.keys.sort.List, <default type>.List,
+		'only type and default survive';
+};
+
+subtest 'defaults survive the wire' => {
+	plan 3;
+
+	my $server = MCP::Server.new(:name<schema-test>, :version<1.0>);
+	$server.tool: 'grep',
+		description => 'Search for a pattern',
+		params => {
+			pattern => { type => 'string', description => 'Text to find', required => True },
+			regex   => { type => 'boolean', description => 'Pattern is a regex', default => False },
+			'max-results' => { type => 'integer', description => 'Match cap', default => 50 },
+		},
+		handler => -> :%args { 'ok' };
+
+	my %resp = $server.handle-request({
+		jsonrpc => '2.0', id => 1, method => 'tools/list',
+	});
+	my %tool = %resp<result><tools>.first(*<name> eq 'grep');
+	is-deeply %tool<inputSchema><required>, ['pattern',], 'required survives tools/list';
+
+	# Through the JSON encoder a transport actually uses: a Raku False has to
+	# arrive as a JSON false, not as an empty string or a 0.
+	my %round-tripped = from-json(to-json(%resp));
+	my %wire = %round-tripped<result><tools>.first(*<name> eq 'grep')<inputSchema><properties>;
+	is-deeply %wire<regex><default>, False, 'a False default survives JSON encoding';
+	is %wire<max-results><default>, 50, 'an integer default survives JSON encoding';
+};

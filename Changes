@@ -2,6 +2,43 @@ Revision history for MCP::Server
 
 {{$NEXT}}
 
+0.7.0  2026-09-27T21:32:58+01:00
+    - FIX: [2026-09-27] the DSL now reads declarator docs when the server is
+      built instead of while the C<mcp> class composes. Tool descriptions
+      (C<#|> on a method), parameter descriptions (C<#=> / C<#|> on a named
+      parameter) and the server C<instructions> (C<#|> on the class) were
+      all read inside the metaclass's C<compose>, which runs at BEGIN time.
+      A compiler that attaches declarator docs later than that -- RakuAST,
+      the default frontend from Rakudo 2026.09, only does so at CHECK time --
+      saw no docs there, and every description and the instructions were
+      dropped without a word. Parameter validation and the JSON type mapping
+      still happen in C<compose>, so a slurpy or positional parameter, or a
+      type with no JSON mapping, is still a compile-time error.
+    - NEW: [2026-09-19] a tool parameter may now declare a `default`, and it
+      reaches the published input schema as the JSON Schema `default` keyword.
+      Only `type`, `description` and `required` used to survive the trip from
+      a registration's `params` to the wire, so a pack could apply a default
+      in its handler with no way to say so in the contract the model reads:
+      fs_grep with no `path` searched the whole root, and the model got a
+      plausible answer to a question it had not asked. The key is copied
+      whenever it is PRESENT rather than when it is true -- `default => False`
+      and `default => 0` are the real defaults of real parameters -- and it is
+      declaration only: nothing fills a missing argument in, so what a spec
+      advertises has to be what its handler actually applies. Nothing else
+      from a param spec is carried: `items`, `enum` and the numeric bounds
+      stay dropped.
+    - MAINT: [2026-08-27] moved the toolkit test fixtures from
+      C<t/lib/MCP/Server/Tool/> into C<lib/MCP/Server/Tool/> (same
+      module names — C<MCP::Server::Tool::TestKit> and
+      C<MCP::Server::Tool::StrictKit> — now in C<provides>), and
+      deleted C<t/lib>. A C<t/lib> directory is its own CompUnit repo
+      that starts cold on a fresh C<zef install>, and parallel test
+      files pulling the fixtures' dependency chain into that cold
+      store can race and fail the install outright. C<lib/> is staged
+      and precompiled before the test phase runs, so shipping test
+      support inside the dist's own namespace dissolves the race.
+      This is the fleet-wide convention going forward.
+
 0.6.0  2026-08-21T20:54:08+01:00
     - MCP::Server.new(:on-notify(...)): an in-process notification sink for the
       host process that built the server. A server driven through

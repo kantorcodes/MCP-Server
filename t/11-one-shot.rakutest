@@ -1,6 +1,5 @@
 use Test;
 use lib 'lib';
-use lib 't/lib';
 # NB: MCP::Server is deliberately `use`d before any toolkit is `require`d at
 # runtime — that combination is what breaks a bare ::('...') lookup after
 # require, so this file is the regression guard for the bound-require loader.

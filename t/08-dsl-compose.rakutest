@@ -3,7 +3,7 @@ use lib 'lib';
 use MCP::Server::DSL;
 use MCP::Server;
 
-plan 30;
+plan 37;
 
 # Test 1: mcp metaclass is used
 {
@@ -191,6 +191,56 @@ plan 30;
     }
     my $obj = Versioned.new;
     is $obj.server.version, '2.0.0', 'Server version from class version';
+}
+
+# Test 16a: Server instructions from the class doc comment. Declarator docs
+# are read when the server is built, not while the class composes: a compiler
+# that attaches them late (RakuAST) would otherwise lose them silently.
+{
+    #| Answer arithmetic questions; every tool takes integers.
+    mcp Instructed {
+        method foo() { }
+    }
+    my $obj = Instructed.new;
+    is $obj.server.instructions, 'Answer arithmetic questions; every tool takes integers.',
+        'Class doc comment becomes server instructions';
+    my %discover = $obj.server.handle-request({
+        jsonrpc => '2.0', id => 1, method => 'server/discover',
+    });
+    is %discover<result><instructions>, 'Answer arithmetic questions; every tool takes integers.',
+        'Class doc comment reaches the wire as instructions';
+}
+
+# Test 16b: No class doc comment means no instructions at all
+{
+    mcp Uninstructed {
+        method foo() { }
+    }
+    my $obj = Uninstructed.new;
+    nok $obj.server.instructions.defined, 'No instructions when the class has no doc';
+    my %discover = $obj.server.handle-request({
+        jsonrpc => '2.0', id => 1, method => 'server/discover',
+    });
+    nok %discover<result><instructions>:exists, 'No instructions key on the wire either';
+}
+
+# Test 16c: Parameter doc comments become parameter descriptions
+{
+    mcp ParamDocs {
+        method add(
+            Int :$a!, #= The first addend
+            Int :$b!, #= The second addend
+            Int :$c = 0,
+        ) { $a + $b + $c }
+    }
+    my $obj = ParamDocs.new;
+    my %resp = $obj.server.handle-request({
+        jsonrpc => '2.0', id => 1, method => 'tools/list',
+    });
+    my %props = %resp<result><tools>.first(*<name> eq 'add')<inputSchema><properties>;
+    is %props<a><description>, 'The first addend', 'First parameter doc becomes its description';
+    is %props<b><description>, 'The second addend', 'Second parameter doc becomes its description';
+    nok %props<c><description>:exists, 'Undocumented parameter has no description';
 }
 
 # Test 17: Server exists with server methods

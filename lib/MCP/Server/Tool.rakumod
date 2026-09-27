@@ -17,6 +17,19 @@ has &.handler is required;
 #| one decision the server itself makes on the strength of them (batching).
 has %.annotations;
 
+#| The JSON Schema published for this tool's arguments, built from the
+#| C<params> the registration declared.  Three keys of a param spec reach the
+#| wire: C<type> (C<string> when a spec omits it), C<description>, and
+#| C<default>.  A spec marked C<< required => True >> names its parameter in
+#| the schema's top-level C<required> array instead, and a schema with nothing
+#| required carries no C<required> key at all.
+#|
+#| C<default> is copied whenever the key is B<present>, never when it is
+#| merely true: C<< default => False >> and C<< default => 0 >> are the real
+#| defaults of real parameters, and a model told nothing about them is a model
+#| that cannot tell "off" from "unspecified".  It is declaration only —
+#| nothing here fills a missing argument in — so the value a spec advertises
+#| has to be the one the handler itself applies when the argument is absent.
 method input-schema(--> Hash) {
 	my %properties;
 	my @required;
@@ -24,6 +37,7 @@ method input-schema(--> Hash) {
 		my %prop;
 		%prop<type> = %spec<type> // 'string';
 		%prop<description> = %spec<description> if %spec<description>.defined;
+		%prop<default> = %spec<default> if %spec<default>:exists;
 		%properties{$name} = %prop;
 		@required.push($name) if %spec<required>;
 	}

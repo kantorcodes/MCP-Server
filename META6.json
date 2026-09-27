@@ -27,6 +27,8 @@
     "MCP::Server::Protocol": "lib/MCP/Server/Protocol.rakumod",
     "MCP::Server::Resource": "lib/MCP/Server/Resource.rakumod",
     "MCP::Server::Tool": "lib/MCP/Server/Tool.rakumod",
+    "MCP::Server::Tool::StrictKit": "lib/MCP/Server/Tool/StrictKit.rakumod",
+    "MCP::Server::Tool::TestKit": "lib/MCP/Server/Tool/TestKit.rakumod",
     "MCP::Server::Toolkit": "lib/MCP/Server/Toolkit.rakumod",
     "MCP::Server::Transport": "lib/MCP/Server/Transport.rakumod",
     "MCP::Server::Transport::Stdio": "lib/MCP/Server/Transport/Stdio.rakumod",
@@ -45,5 +47,5 @@
   ],
   "test-depends": [
   ],
-  "version": "0.6.0"
+  "version": "0.7.0"
 }

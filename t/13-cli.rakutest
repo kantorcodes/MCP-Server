@@ -1,6 +1,5 @@
 use Test;
 use lib 'lib';
-use lib 't/lib';
 use MCP::Server;
 use MCP::Server::CLI;
 

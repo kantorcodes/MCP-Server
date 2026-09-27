@@ -1,6 +1,5 @@
 use Test;
 use lib 'lib';
-use lib 't/lib';
 use JSON::Fast;
 use MCP::Server;
 

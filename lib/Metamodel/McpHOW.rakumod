@@ -69,32 +69,30 @@ method compose(Mu $_) {
 
 	callsame;
 
-	my %server-data = (
-		name           => .^name,
-		|(version      => ~.^ver if .^ver),
-		|(instructions => ~.WHY  if .WHY ),
-	);
+	my \type = $_;
 
 	my @tools = do for .^methods: :local -> &method {
 		my $name  = &method.name;
 		next if $name eq "POPULATE";
-		my $description = &method.WHY;
-		my %params     := Map.new: &method.signature.params.skip.map: {
+		# Validate and type-map eagerly (compile-time errors stay compile-time);
+		# keep the Parameter objects so .WHY is read lazily, at runtime.
+		my @params = &method.signature.params.skip.map: {
 			next if .name eq '%_';
 			die "MCP::Server::DSL does not accept slurp parameters ({&method.name} -> {.gist})." if .slurpy;
 			die "MCP::Server::DSL does not accept positional parameters ({&method.name} -> {.gist})." unless .named;
-			my $name = .named_names.head;
-
-			$name => %(
-				type          => type-map($_),
-				required      => !.optional,
-				|(description => ~.WHY if .WHY),
-			),
+			($_, .named_names.head, type-map($_))
 		}
 
 		-> $_, :$obj! {
+			my %params := Map.new: @params.map: -> ($p, $pname, $type) {
+				$pname => %(
+					type          => $type,
+					required      => !$p.optional,
+					|(description => ~$p.WHY if $p.WHY),
+				)
+			}
 			.tool: $name,
-			|(:description(.Str) with $description),
+			|(:description(.Str) with &method.WHY),
 			:%params,
 			:handler(-> :%args { $obj.&method(|%args) })
 		}
@@ -103,7 +101,10 @@ method compose(Mu $_) {
 	@!mcp-registrars = @tools;
 
 	&!build-server = -> $obj {
-		my $server = MCP::Server.new: |%server-data;
+		my $server = MCP::Server.new:
+			name           => type.^name,
+			|(version      => ~type.^ver if type.^ver),
+			|(instructions => ~type.WHY  if type.WHY );
 		for @!mcp-registrars -> &tool { tool $server, :$obj }
 		$server
 	}

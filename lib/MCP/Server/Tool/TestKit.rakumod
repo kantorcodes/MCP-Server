@@ -28,3 +28,22 @@ method register($registrar) {
 		mime-type => 'text/plain',
 		handler => -> :%args { "greeting={$!greeting} root={$!root}" };
 }
+
+=begin pod
+
+=head1 NAME
+
+MCP::Server::Tool::TestKit - a fixture toolkit with one of everything
+
+=head1 DESCRIPTION
+
+This — and its sibling C<MCP::Server::Tool::StrictKit> — is test support,
+not library surface. It ships inside the dist's own namespace (rather than
+under C<t/lib>) deliberately, so that C<zef install>'s test phase
+precompiles it as part of C<lib/> staging before any test file runs. A
+C<t/lib> CompUnit repo starts cold on a fresh C<zef install>, and parallel
+test files pulling the fixtures' dependency chain into that cold store can
+race and fail the install outright; moving test support into the dist's
+own namespace is the fleet-wide fix for that failure class.
+
+=end pod

@@ -47,12 +47,45 @@ $server.tool: 'search',
     description => 'Search the web',
     params => {
         query => { type => 'string', description => 'Search query', required => True },
-        limit => { type => 'integer', description => 'Max results' },
+        limit => { type => 'integer', description => 'Max results', default => 10 },
     },
     handler => -> :%args {
         # Return a string (wrapped as text content)
         "Results for {%args<query>}..."
     };
+=end code
+
+A parameter spec may carry four keys, and each one reaches the published
+schema:
+
+=item C<type> — the JSON Schema type; C<string> when the spec omits it.
+=item C<description> — what the parameter means, written for the model.
+=item C<required> — C<True> names the parameter in the schema's top-level
+C<required> array. Leave it off and the model is told the parameter is
+optional, so mark every parameter the handler cannot do without: the
+schema is the only place a model can learn that before it calls.
+=item C<default> — emitted as the JSON Schema C<default> keyword, so a
+model can see what omitting the argument actually means.
+
+Declaring a default does not I<apply> one: nothing in the framework fills
+a missing argument in, and the handler still decides what an absent
+argument means. So the declared value must be the one the handler itself
+uses — a schema advertising a default the code does not honour is worse
+than no default at all. The key is copied whenever it is present, never
+when it is merely true, so C<< default => False >> and C<< default => 0 >>
+are published like any other value:
+
+=begin code :lang<raku>
+params => {
+    pattern => { type => 'string',  description => 'Text to find', required => True },
+    regex   => { type => 'boolean', description => 'Treat pattern as a regex', default => False },
+    context => { type => 'integer', description => 'Lines around each match', default => 0 },
+},
+handler => -> :%args {
+    my $regex   = %args<regex>   // False;   # the same default, applied
+    my $context = %args<context> // 0;
+    ...
+};
 =end code
 
 Tool handlers receive C<:%args> and return:
