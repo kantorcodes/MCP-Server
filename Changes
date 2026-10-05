@@ -2,6 +2,13 @@ Revision history for MCP::Server
 
 {{$NEXT}}
 
+0.7.1  2026-10-05T10:45:10+01:00
+
+    - CHANGE: [2026-09-28] Requires JSON::Fast 0.21.0 or later (zef:timo).
+      0.19 (cpan:TIMOTIMO) fails its own tests under the RakuAST compiler
+      frontend that Rakudo 2026.09 makes the default, so installing this
+      distribution stopped at that dependency.
+
 0.7.0  2026-09-27T21:32:58+01:00
     - FIX: [2026-09-27] the DSL now reads declarator docs when the server is
       built instead of while the C<mcp> class composes. Tool descriptions
